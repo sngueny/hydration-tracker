@@ -1,368 +1,407 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Droplets, BarChart3, Target, Bell, Smartphone, X } from "lucide-react"
+import Link from "next/link"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Trash2, Droplets } from "lucide-react"
 
-interface WaterEntry {
-  _id: string
-  amount: number
-  unit: "ml" | "oz"
-  timestamp: string
-}
-
-interface User {
-  id: string
-  email: string
-}
-
-export default function WaterTracker() {
-  const [user, setUser] = useState<User | null>(null)
-  const [entries, setEntries] = useState<WaterEntry[]>([])
-  const [amount, setAmount] = useState("")
-  const [unit, setUnit] = useState<"ml" | "oz">("ml")
-  const [loading, setLoading] = useState(false)
-
-  // Auth states
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [authLoading, setAuthLoading] = useState(false)
+export default function LandingPage() {
+  const [isVisible, setIsVisible] = useState(false)
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false)
+  const [helpFormData, setHelpFormData] = useState({
+    name: "",
+    email: "",
+    message: ""
+  })
+  const [helpFormSubmitted, setHelpFormSubmitted] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (token) {
-      fetchUser()
-      fetchEntries()
-    }
+    setIsVisible(true)
   }, [])
 
-  const fetchUser = async () => {
-    try {
-      const response = await fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-      if (response.ok) {
-        const userData = await response.json()
-        setUser(userData)
-      } else {
-        localStorage.removeItem("token")
-      }
-    } catch (error) {
-      console.error("Error fetching user:", error)
-      localStorage.removeItem("token")
-    }
+  const handleHelpFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setHelpFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
-  const fetchEntries = async () => {
-    try {
-      const response = await fetch("/api/water/today", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setEntries(data)
-      }
-    } catch (error) {
-      console.error("Error fetching entries:", error)
-    }
-  }
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleHelpFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setAuthLoading(true)
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+    console.log("Help form submitted:", helpFormData)
+    setHelpFormSubmitted(true)
+    
+    // Reset form after 3 seconds and close dialog
+    setTimeout(() => {
+      setHelpFormSubmitted(false)
+      setHelpDialogOpen(false)
+      setHelpFormData({
+        name: "",
+        email: "",
+        message: ""
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        localStorage.setItem("token", data.token)
-        setUser(data.user)
-        fetchEntries()
-        setEmail("")
-        setPassword("")
-      } else {
-        const error = await response.json()
-        alert(error.message || "Login failed")
-      }
-    } catch (error) {
-      console.error("Login error:", error)
-      alert("Login failed")
-    }
-    setAuthLoading(false)
-  }
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setAuthLoading(true)
-    try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        localStorage.setItem("token", data.token)
-        setUser(data.user)
-        setEmail("")
-        setPassword("")
-      } else {
-        const error = await response.json()
-        alert(error.message || "Signup failed")
-      }
-    } catch (error) {
-      console.error("Signup error:", error)
-      alert("Signup failed")
-    }
-    setAuthLoading(false)
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem("token")
-    setUser(null)
-    setEntries([])
-  }
-
-  const addWaterEntry = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!amount || isNaN(Number(amount))) return
-
-    setLoading(true)
-    try {
-      const response = await fetch("/api/water", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          amount: Number(amount),
-          unit,
-        }),
-      })
-
-      if (response.ok) {
-        const newEntry = await response.json()
-        setEntries([...entries, newEntry])
-        setAmount("")
-      } else {
-        alert("Failed to add entry")
-      }
-    } catch (error) {
-      console.error("Error adding entry:", error)
-      alert("Failed to add entry")
-    }
-    setLoading(false)
-  }
-
-  const deleteEntry = async (id: string) => {
-    try {
-      const response = await fetch(`/api/water/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-
-      if (response.ok) {
-        setEntries(entries.filter((entry) => entry._id !== id))
-      } else {
-        alert("Failed to delete entry")
-      }
-    } catch (error) {
-      console.error("Error deleting entry:", error)
-      alert("Failed to delete entry")
-    }
-  }
-
-  const getTotalIntake = () => {
-    return entries.reduce((total, entry) => {
-      const amountInMl = entry.unit === "oz" ? entry.amount * 29.5735 : entry.amount
-      return total + amountInMl
-    }, 0)
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-4">
-              <Droplets className="h-12 w-12 text-blue-500" />
-            </div>
-            <CardTitle>Water Intake Tracker</CardTitle>
-            <CardDescription>Track your daily hydration goals</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={authLoading}>
-                    {authLoading ? "Logging in..." : "Login"}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="signup">
-                <form onSubmit={handleSignup} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={authLoading}>
-                    {authLoading ? "Creating account..." : "Sign Up"}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    }, 3000)
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+    <div suppressHydrationWarning className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50">
+      {/* Header */}
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Droplets className="h-8 w-8 text-blue-500" />
-            <h1 className="text-2xl font-bold">Water Tracker</h1>
+            <Droplets className="h-8 w-8 text-blue-600" />
+            <span className="text-2xl font-bold text-gray-900">HydroTracker</span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">Welcome, {user.email}</span>
-            <Button variant="outline" onClick={handleLogout}>
-              Logout
+          <div className="flex gap-4">
+            <Link href="/auth">
+              <Button variant="outline">Sign In</Button>
+            </Link>
+            <Link href="/auth">
+              <Button>Get Started</Button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="container mx-auto px-4 py-20 text-center">
+        <div
+          className={`transition-all duration-1000 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
+        >
+          <Badge variant="secondary" className="mb-4">
+            🎉 Track your hydration journey
+          </Badge>
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+            Stay Hydrated,
+            <span className="text-blue-600"> Stay Healthy</span>
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Track your daily water intake, set personalized goals, and build healthy hydration habits with our intuitive
+            water tracking app.
+          </p>
+          <div className="flex gap-4 justify-center flex-wrap">
+            <Link href="/auth">
+              <Button size="lg" className="text-lg px-8">
+                Start Tracking Free
+              </Button>
+            </Link>
+            <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent">
+              View Demo
             </Button>
           </div>
         </div>
+      </section>
 
-        <div className="grid gap-6">
-          <Card>
+      {/* Preview Section */}
+      <section className="container mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">See It In Action</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Get a glimpse of how HydroTracker helps you maintain optimal hydration levels
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          {/* Dashboard Preview */}
+          <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Add Water Intake</CardTitle>
-              <CardDescription>Log your water consumption</CardDescription>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-lg">Dashboard</CardTitle>
+              </div>
+              <CardDescription>Track your daily progress at a glance</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={addWaterEntry} className="flex gap-4 items-end">
-                <div className="flex-1">
-                  <Label htmlFor="amount">Amount</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Enter amount"
-                    required
-                  />
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Today's Goal</span>
+                  <span className="font-semibold">2000ml</span>
                 </div>
-                <div>
-                  <Label htmlFor="unit">Unit</Label>
-                  <Select value={unit} onValueChange={(value: "ml" | "oz") => setUnit(value)}>
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ml">ml</SelectItem>
-                      <SelectItem value="oz">oz</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: "75%" }}></div>
                 </div>
-                <Button type="submit" disabled={loading}>
-                  {loading ? "Adding..." : "Add"}
-                </Button>
-              </form>
+                <div className="text-sm text-gray-600">1500ml / 2000ml (75%)</div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
+          {/* Water Entry Preview */}
+          <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle>Today's Intake</CardTitle>
-              <CardDescription>
-                Total: {Math.round(getTotalIntake())} ml ({Math.round(getTotalIntake() / 29.5735)} oz)
-              </CardDescription>
+              <div className="flex items-center gap-2">
+                <Droplets className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-lg">Quick Entry</CardTitle>
+              </div>
+              <CardDescription>Log your water intake instantly</CardDescription>
             </CardHeader>
             <CardContent>
-              {entries.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No entries for today</p>
-              ) : (
-                <div className="space-y-2">
-                  {entries.map((entry) => (
-                    <div key={entry._id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <span className="font-medium">
-                          {entry.amount} {entry.unit}
-                        </span>
-                        <span className="text-sm text-gray-500 ml-2">
-                          {new Date(entry.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={() => deleteEntry(entry._id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="flex-1 h-10 bg-gray-100 rounded border"></div>
+                  <div className="w-16 h-10 bg-gray-100 rounded border"></div>
                 </div>
-              )}
+                <Button className="w-full" size="sm">
+                  Add Entry
+                </Button>
+                <div className="text-xs text-gray-500">Recent: 250ml - 2:30 PM</div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Statistics Preview */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-lg">Statistics</CardTitle>
+              </div>
+              <CardDescription>Analyze your hydration patterns</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Weekly Average</span>
+                  <span className="font-semibold">1850ml</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Best Day</span>
+                  <span className="font-semibold">2400ml</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Streak</span>
+                  <span className="font-semibold">7 days</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
-      </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="bg-gray-50 py-16">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Everything You Need</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Comprehensive features to help you build and maintain healthy hydration habits
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            <div className="text-center">
+              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Bell className="h-8 w-8 text-blue-600" />
+              </div>
+              <h3 className="font-semibold mb-2">Smart Reminders</h3>
+              <p className="text-sm text-gray-600">Get personalized notifications to stay on track</p>
+            </div>
+
+            <div className="text-center">
+              <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="h-8 w-8 text-green-600" />
+              </div>
+              <h3 className="font-semibold mb-2">Detailed Analytics</h3>
+              <p className="text-sm text-gray-600">Visualize your progress with charts and insights</p>
+            </div>
+
+            <div className="text-center">
+              <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Target className="h-8 w-8 text-purple-600" />
+              </div>
+              <h3 className="font-semibold mb-2">Custom Goals</h3>
+              <p className="text-sm text-gray-600">Set personalized hydration targets</p>
+            </div>
+
+            <div className="text-center">
+              <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Smartphone className="h-8 w-8 text-orange-600" />
+              </div>
+              <h3 className="font-semibold mb-2">Mobile Friendly</h3>
+              <p className="text-sm text-gray-600">Access anywhere, anytime on any device</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="container mx-auto px-4 py-20 text-center">
+        <h2 className="text-3xl font-bold text-gray-900 mb-4">Ready to Start Your Hydration Journey?</h2>
+        <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+          Join thousands of users who have improved their health through better hydration habits.
+        </p>
+        <Link href="/auth">
+          <Button size="lg" className="text-lg px-8">
+            Get Started Today
+          </Button>
+        </Link>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="container mx-auto px-4">
+          <div className="grid md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Droplets className="h-6 w-6" />
+                <span className="text-xl font-bold">HydroTracker</span>
+              </div>
+              <p className="text-gray-400 text-sm">Your personal hydration companion for a healthier lifestyle.</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Features</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>Water Tracking</li>
+                <li>Smart Reminders</li>
+                <li>Progress Analytics</li>
+                <li>Goal Setting</li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Support</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <button 
+                    onClick={() => setHelpDialogOpen(true)}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    Help Center
+                  </button>
+                </li>
+                <li><a href="mailto:support@hydrotracker.com" className="hover:text-white transition-colors">Contact Us</a></li>
+                <li><a href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</a></li>
+                <li><a href="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-4">Connect</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <a 
+                    href="https://twitter.com/hydration-tracker" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    Twitter
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="https://facebook.com/hydration-tracker" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    Facebook
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="https://instagram.com/hydration-tracker" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    Instagram
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="https://hydrotracker.com/newsletter" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    Newsletter
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400">
+            <p>&copy; 2025 HydroTracker. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+
+      {/* Help Center Dialog */}
+      <Dialog open={helpDialogOpen} onOpenChange={setHelpDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Help Center</DialogTitle>
+            <DialogDescription>
+              Fill out the form below and we'll get back to you as soon as possible.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {helpFormSubmitted ? (
+            <div className="py-6 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Thank You!</h3>
+              <p className="text-gray-600">Your message has been sent successfully. We'll respond shortly.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleHelpFormSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
+                <Input 
+                  id="name" 
+                  name="name" 
+                  value={helpFormData.name} 
+                  onChange={handleHelpFormChange} 
+                  placeholder="Your name" 
+                  required 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                  id="email" 
+                  name="email" 
+                  type="email" 
+                  value={helpFormData.email} 
+                  onChange={handleHelpFormChange} 
+                  placeholder="your.email@example.com" 
+                  required 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="message">How can we help?</Label>
+                <Textarea 
+                  id="message" 
+                  name="message" 
+                  value={helpFormData.message} 
+                  onChange={handleHelpFormChange} 
+                  placeholder="Describe your issue or question..." 
+                  rows={4} 
+                  required 
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setHelpDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Submit Request</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

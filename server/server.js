@@ -235,3 +235,260 @@ const PORT = process.env.PORT || 5000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
+
+
+// Statistics endpoints
+app.get("/api/stats/dashboard", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get today's entries
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const todayEntries = await WaterEntry.find({
+      userId,
+      timestamp: { $gte: today, $lt: tomorrow }
+    });
+    
+    // Calculate stats (simplified version)
+    const todayTotal = todayEntries.reduce((sum, entry) => {
+      return sum + (entry.unit === 'oz' ? entry.amount * 29.5735 : entry.amount);
+    }, 0);
+    
+    res.json({
+      todayTotal,
+      weeklyAverage: 1800, // You'll need to calculate this
+      monthlyTotal: 45000, // You'll need to calculate this
+      streak: 5, // You'll need to calculate this
+      goal: 2000
+    });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Profile endpoint
+app.get("/api/profile", authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select("-password");
+    const totalEntries = await WaterEntry.countDocuments({ userId: req.user.userId });
+    
+    res.json({
+      id: user._id,
+      email: user.email,
+      name: user.name || "",
+      joinDate: user.createdAt,
+      dailyGoal: user.dailyGoal || 2000,
+      totalEntries,
+      totalIntake: 50000, // Calculate from entries
+      longestStreak: 10, // Calculate streak
+      currentStreak: 5
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Settings endpoints
+app.get("/api/settings", authenticateToken, async (req, res) => {
+  try {
+    // Return default settings - you can store these in user document
+    res.json({
+      notifications: {
+        enabled: false,
+        interval: 60,
+        startTime: "08:00",
+        endTime: "22:00",
+        sound: true,
+        email: false
+      },
+      appearance: {
+        theme: "system",
+        colorScheme: "blue",
+        compactMode: false
+      },
+      privacy: {
+        dataSharing: false,
+        analytics: true,
+        marketing: false
+      },
+      units: {
+        preferred: "ml",
+        temperature: "celsius"
+      },
+      goals: {
+        dailyTarget: 2000,
+        reminderFrequency: 60
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Additional endpoints for week/month data
+app.get("/api/water/week", authenticateToken, async (req, res) => {
+  try {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const entries = await WaterEntry.find({
+      userId: req.user.userId,
+      timestamp: { $gte: weekAgo }
+    }).sort({ timestamp: -1 });
+    
+    res.json(entries);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.get("/api/water/month", authenticateToken, async (req, res) => {
+  try {
+    const monthAgo = new Date();
+    monthAgo.setDate(monthAgo.getDate() - 30);
+    
+    const entries = await WaterEntry.find({
+      userId: req.user.userId,
+      timestamp: { $gte: monthAgo }
+    }).sort({ timestamp: -1 });
+    
+    res.json(entries);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Additional statistics endpoint
+
+app.get("/api/stats/detailed", authenticateToken, async (req, res) => {
+  try {
+    const { period } = req.query;
+    const userId = req.user.userId;
+    
+    // Get date range based on period
+    const endDate = new Date();
+    let startDate = new Date();
+    
+    if (period === "week") {
+      startDate.setDate(endDate.getDate() - 7);
+    } else if (period === "month") {
+      startDate.setDate(endDate.getDate() - 30);
+    } else if (period === "year") {
+      startDate.setDate(endDate.getDate() - 365);
+    }
+    
+    // Get all water entries for the user within the date range
+    const entries = await WaterEntry.find({
+      userId,
+      timestamp: { $gte: startDate, $lte: endDate }
+    }).sort({ timestamp: 1 });
+    
+    if (entries.length === 0) {
+      return res.json({
+        dailyAverage: 0,
+        weeklyAverage: 0,
+        monthlyAverage: 0,
+        bestDay: { date: new Date(), amount: 0 },
+        worstDay: { date: new Date(), amount: 0 },
+        currentStreak: 0,
+        longestStreak: 0,
+        totalIntake: 0,
+        goalAchievementRate: 0,
+        peakHours: [],
+        weeklyData: [],
+        monthlyData: []
+      });
+    }
+    
+    // Process entries to calculate statistics
+    // This is a simplified example - you'd need to implement the full logic
+    
+    // Group entries by day
+    const entriesByDay = {};
+    let totalIntake = 0;
+    
+    entries.forEach(entry => {
+      const date = new Date(entry.timestamp).toISOString().split('T')[0];
+      if (!entriesByDay[date]) {
+        entriesByDay[date] = 0;
+      }
+      
+      // Convert to ml if needed
+      const amount = entry.unit === 'oz' ? entry.amount * 29.5735 : entry.amount;
+      entriesByDay[date] += amount;
+      totalIntake += amount;
+    });
+    
+    // Calculate daily average
+    const days = Object.keys(entriesByDay);
+    const dailyValues = Object.values(entriesByDay);
+    const dailyAverage = totalIntake / days.length;
+    
+    // Find best and worst days
+    let bestAmount = 0;
+    let bestDate = '';
+    let worstAmount = Infinity;
+    let worstDate = '';
+    
+    days.forEach(date => {
+      const amount = entriesByDay[date];
+      if (amount > bestAmount) {
+        bestAmount = amount;
+        bestDate = date;
+      }
+      if (amount < worstAmount) {
+        worstAmount = amount;
+        worstDate = date;
+      }
+    });
+    
+    // Calculate streaks (simplified)
+    let currentStreak = 0;
+    let longestStreak = 0;
+    
+    // Calculate goal achievement rate (assuming 2000ml goal)
+    const goalAmount = 2000;
+    const daysMetGoal = dailyValues.filter(amount => amount >= goalAmount).length;
+    const goalAchievementRate = (daysMetGoal / days.length) * 100;
+    
+    // Generate weekly data for chart
+    const weeklyData = days.slice(-7).map(date => ({
+      date: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+      amount: entriesByDay[date],
+      goal: goalAmount
+    }));
+    
+    // Generate peak hours data (simplified)
+    const peakHours = [
+      { hour: 8, count: 5 },
+      { hour: 12, count: 8 },
+      { hour: 16, count: 6 },
+      { hour: 20, count: 4 }
+    ];
+    
+    // Return the statistics
+    res.json({
+      dailyAverage,
+      weeklyAverage: dailyAverage, // Simplified
+      monthlyAverage: dailyAverage, // Simplified
+      bestDay: { date: bestDate, amount: bestAmount },
+      worstDay: { date: worstDate, amount: worstAmount },
+      currentStreak: 3, // Simplified
+      longestStreak: 7, // Simplified
+      totalIntake,
+      goalAchievementRate,
+      peakHours,
+      weeklyData,
+      monthlyData: [] // Simplified
+    });
+    
+  } catch (error) {
+    console.error("Error generating statistics:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
