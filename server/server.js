@@ -236,12 +236,6 @@ app.delete("/api/water/:id", authenticateToken, async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 5000
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
-
-
 // Statistics endpoints
 app.get("/api/stats/dashboard", authenticateToken, async (req, res) => {
   try {
@@ -497,3 +491,13 @@ app.get("/api/stats/detailed", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+// Export the Express app for Vercel
+module.exports = app;
