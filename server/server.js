@@ -10,17 +10,19 @@ const app = express()
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-frontend-domain.vercel.app'] 
-    : 'http://localhost:3000',
+    ? [process.env.FRONTEND_URL, 'https://your-app-name.onrender.com']
+    : ['http://localhost:3000'],
   credentials: true
-}));
+}))
 app.use(express.json())
 
-// MongoDB connection
+// MongoDB connection with better error handling
 mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/water-tracker", {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
+.then(() => console.log('Connected to MongoDB'))
+.catch(err => console.error('MongoDB connection error:', err))
 
 // User Schema
 const userSchema = new mongoose.Schema(
@@ -34,6 +36,14 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
+    },
+    name: {
+      type: String,
+      default: "",
+    },
+    dailyGoal: {
+      type: Number,
+      default: 2000,
     },
   },
   {
@@ -74,16 +84,16 @@ const WaterEntry = mongoose.model("WaterEntry", waterEntrySchema)
 
 // JWT Middleware
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"]
-  const token = authHeader && authHeader.split(" ")[1]
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
 
   if (!token) {
-    return res.status(401).json({ message: "Access token required" })
+    return res.status(401).json({ error: 'Access token required' })
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || "your-secret-key", (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ message: "Invalid token" })
+      return res.status(403).json({ error: 'Invalid token' })
     }
     req.user = user
     next()
@@ -93,40 +103,26 @@ const authenticateToken = (req, res, next) => {
 // Auth Routes
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { email, password, name } = req.body
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email })
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" })
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' })
     }
 
-    // Hash password
+    const existingUser = await User.findOne({ email })
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' })
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user
-    const user = new User({
-      email,
-      password: hashedPassword,
-    })
-
+    const user = new User({ email, password: hashedPassword, name })
     await user.save()
 
-    // Generate JWT
-    const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET || "your-secret-key", {
-      expiresIn: "7d",
-    })
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-      },
-    })
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET)
+    res.status(201).json({ token, user: { id: user._id, email: user.email, name: user.name } })
   } catch (error) {
-    console.error("Signup error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error('Signup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -134,46 +130,38 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body
 
-    // Find user
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' })
+    }
+
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" })
+      return res.status(400).json({ error: 'Invalid credentials' })
     }
 
-    // Check password
     const isValidPassword = await bcrypt.compare(password, user.password)
     if (!isValidPassword) {
-      return res.status(400).json({ message: "Invalid credentials" })
+      return res.status(400).json({ error: 'Invalid credentials' })
     }
 
-    // Generate JWT
-    const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET || "your-secret-key", {
-      expiresIn: "7d",
-    })
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-      },
-    })
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET)
+    res.json({ token, user: { id: user._id, email: user.email, name: user.name } })
   } catch (error) {
-    console.error("Login error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error('Login error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select("-password")
-    res.json({
-      id: user._id,
-      email: user.email,
-    })
+    const user = await User.findById(req.user.userId).select('-password')
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    res.json(user)
   } catch (error) {
-    console.error("Get user error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error('Get user error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -181,6 +169,10 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 app.post("/api/water", authenticateToken, async (req, res) => {
   try {
     const { amount, unit } = req.body
+
+    if (!amount || !unit) {
+      return res.status(400).json({ error: 'Amount and unit are required' })
+    }
 
     const waterEntry = new WaterEntry({
       userId: req.user.userId,
@@ -191,8 +183,8 @@ app.post("/api/water", authenticateToken, async (req, res) => {
     await waterEntry.save()
     res.status(201).json(waterEntry)
   } catch (error) {
-    console.error("Add water entry error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error('Add water entry error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -213,8 +205,8 @@ app.get("/api/water/today", authenticateToken, async (req, res) => {
 
     res.json(entries)
   } catch (error) {
-    console.error("Get today entries error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error('Get today entries error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
@@ -226,278 +218,104 @@ app.delete("/api/water/:id", authenticateToken, async (req, res) => {
     })
 
     if (!entry) {
-      return res.status(404).json({ message: "Entry not found" })
+      return res.status(404).json({ error: 'Entry not found' })
     }
 
-    res.json({ message: "Entry deleted successfully" })
+    res.json({ message: 'Entry deleted successfully' })
   } catch (error) {
-    console.error("Delete entry error:", error)
-    res.status(500).json({ message: "Server error" })
+    console.error('Delete entry error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
 // Statistics endpoints
 app.get("/api/stats/dashboard", authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
-    
-    // Get today's entries
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
     const todayEntries = await WaterEntry.find({
-      userId,
+      userId: req.user.userId,
       timestamp: { $gte: today, $lt: tomorrow }
-    });
-    
-    // Calculate stats (simplified version)
-    const todayTotal = todayEntries.reduce((sum, entry) => {
-      return sum + (entry.unit === 'oz' ? entry.amount * 29.5735 : entry.amount);
-    }, 0);
-    
+    })
+
+    const totalToday = todayEntries.reduce((sum, entry) => {
+      return sum + (entry.unit === 'oz' ? entry.amount * 29.5735 : entry.amount)
+    }, 0)
+
+    const user = await User.findById(req.user.userId)
+    const dailyGoal = user.dailyGoal || 2000
+
     res.json({
-      todayTotal,
-      weeklyAverage: 1800, // You'll need to calculate this
-      monthlyTotal: 45000, // You'll need to calculate this
-      streak: 5, // You'll need to calculate this
-      goal: 2000
-    });
+      totalToday: Math.round(totalToday),
+      dailyGoal,
+      percentage: Math.round((totalToday / dailyGoal) * 100),
+      entriesCount: todayEntries.length
+    })
   } catch (error) {
-    console.error("Dashboard stats error:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error('Dashboard stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 // Profile endpoint
 app.get("/api/profile", authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select("-password");
-    const totalEntries = await WaterEntry.countDocuments({ userId: req.user.userId });
+    const user = await User.findById(req.user.userId).select('-password')
+    const totalEntries = await WaterEntry.countDocuments({ userId: req.user.userId })
     
+    const allEntries = await WaterEntry.find({ userId: req.user.userId })
+    const totalIntake = allEntries.reduce((sum, entry) => {
+      return sum + (entry.unit === 'oz' ? entry.amount * 29.5735 : entry.amount)
+    }, 0)
+
     res.json({
-      id: user._id,
-      email: user.email,
-      name: user.name || "",
-      joinDate: user.createdAt,
-      dailyGoal: user.dailyGoal || 2000,
+      ...user.toObject(),
       totalEntries,
-      totalIntake: 50000, // Calculate from entries
-      longestStreak: 10, // Calculate streak
-      currentStreak: 5
-    });
+      totalIntake: Math.round(totalIntake),
+      currentStreak: 0, // You can implement streak calculation
+      longestStreak: 0,
+      joinDate: user.createdAt
+    })
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error('Profile error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
-// Settings endpoints
-app.get("/api/settings", authenticateToken, async (req, res) => {
+app.put("/api/profile", authenticateToken, async (req, res) => {
   try {
-    // Return default settings - you can store these in user document
-    res.json({
-      notifications: {
-        enabled: false,
-        interval: 60,
-        startTime: "08:00",
-        endTime: "22:00",
-        sound: true,
-        email: false
-      },
-      appearance: {
-        theme: "system",
-        colorScheme: "blue",
-        compactMode: false
-      },
-      privacy: {
-        dataSharing: false,
-        analytics: true,
-        marketing: false
-      },
-      units: {
-        preferred: "ml",
-        temperature: "celsius"
-      },
-      goals: {
-        dailyTarget: 2000,
-        reminderFrequency: 60
-      }
-    });
+    const { name, dailyGoal } = req.body
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { name, dailyGoal },
+      { new: true }
+    ).select('-password')
+
+    res.json(user)
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error('Update profile error:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
-// Additional endpoints for week/month data
-app.get("/api/water/week", authenticateToken, async (req, res) => {
-  try {
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    
-    const entries = await WaterEntry.find({
-      userId: req.user.userId,
-      timestamp: { $gte: weekAgo }
-    }).sort({ timestamp: -1 });
-    
-    res.json(entries);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() })
+})
 
-app.get("/api/water/month", authenticateToken, async (req, res) => {
-  try {
-    const monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    
-    const entries = await WaterEntry.find({
-      userId: req.user.userId,
-      timestamp: { $gte: monthAgo }
-    }).sort({ timestamp: -1 });
-    
-    res.json(entries);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// Catch all for undefined routes
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Route not found' })
+})
 
-// Additional statistics endpoint
+const PORT = process.env.PORT || 5000
 
-app.get("/api/stats/detailed", authenticateToken, async (req, res) => {
-  try {
-    const { period } = req.query;
-    const userId = req.user.userId;
-    
-    // Get date range based on period
-    const endDate = new Date();
-    let startDate = new Date();
-    
-    if (period === "week") {
-      startDate.setDate(endDate.getDate() - 7);
-    } else if (period === "month") {
-      startDate.setDate(endDate.getDate() - 30);
-    } else if (period === "year") {
-      startDate.setDate(endDate.getDate() - 365);
-    }
-    
-    // Get all water entries for the user within the date range
-    const entries = await WaterEntry.find({
-      userId,
-      timestamp: { $gte: startDate, $lte: endDate }
-    }).sort({ timestamp: 1 });
-    
-    if (entries.length === 0) {
-      return res.json({
-        dailyAverage: 0,
-        weeklyAverage: 0,
-        monthlyAverage: 0,
-        bestDay: { date: new Date(), amount: 0 },
-        worstDay: { date: new Date(), amount: 0 },
-        currentStreak: 0,
-        longestStreak: 0,
-        totalIntake: 0,
-        goalAchievementRate: 0,
-        peakHours: [],
-        weeklyData: [],
-        monthlyData: []
-      });
-    }
-    
-    // Process entries to calculate statistics
-    // This is a simplified example - you'd need to implement the full logic
-    
-    // Group entries by day
-    const entriesByDay = {};
-    let totalIntake = 0;
-    
-    entries.forEach(entry => {
-      const date = new Date(entry.timestamp).toISOString().split('T')[0];
-      if (!entriesByDay[date]) {
-        entriesByDay[date] = 0;
-      }
-      
-      // Convert to ml if needed
-      const amount = entry.unit === 'oz' ? entry.amount * 29.5735 : entry.amount;
-      entriesByDay[date] += amount;
-      totalIntake += amount;
-    });
-    
-    // Calculate daily average
-    const days = Object.keys(entriesByDay);
-    const dailyValues = Object.values(entriesByDay);
-    const dailyAverage = totalIntake / days.length;
-    
-    // Find best and worst days
-    let bestAmount = 0;
-    let bestDate = '';
-    let worstAmount = Infinity;
-    let worstDate = '';
-    
-    days.forEach(date => {
-      const amount = entriesByDay[date];
-      if (amount > bestAmount) {
-        bestAmount = amount;
-        bestDate = date;
-      }
-      if (amount < worstAmount) {
-        worstAmount = amount;
-        worstDate = date;
-      }
-    });
-    
-    // Calculate streaks (simplified)
-    let currentStreak = 0;
-    let longestStreak = 0;
-    
-    // Calculate goal achievement rate (assuming 2000ml goal)
-    const goalAmount = 2000;
-    const daysMetGoal = dailyValues.filter(amount => amount >= goalAmount).length;
-    const goalAchievementRate = (daysMetGoal / days.length) * 100;
-    
-    // Generate weekly data for chart
-    const weeklyData = days.slice(-7).map(date => ({
-      date: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
-      amount: entriesByDay[date],
-      goal: goalAmount
-    }));
-    
-    // Generate peak hours data (simplified)
-    const peakHours = [
-      { hour: 8, count: 5 },
-      { hour: 12, count: 8 },
-      { hour: 16, count: 6 },
-      { hour: 20, count: 4 }
-    ];
-    
-    // Return the statistics
-    res.json({
-      dailyAverage,
-      weeklyAverage: dailyAverage, // Simplified
-      monthlyAverage: dailyAverage, // Simplified
-      bestDay: { date: bestDate, amount: bestAmount },
-      worstDay: { date: worstDate, amount: worstAmount },
-      currentStreak: 3, // Simplified
-      longestStreak: 7, // Simplified
-      totalIntake,
-      goalAchievementRate,
-      peakHours,
-      weeklyData,
-      monthlyData: [] // Simplified
-    });
-    
-  } catch (error) {
-    console.error("Error generating statistics:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`)
+})
 
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
-// Export the Express app for Vercel
-module.exports = app;
+module.exports = app

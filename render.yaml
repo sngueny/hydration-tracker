@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: hydration-tracker-backend
+    env: node
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        fromDatabase:
+          name: hydration-tracker-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: hydration-tracker-frontend
+          property: host
+
+  - type: web
+    name: hydration-tracker-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: hydration-tracker-backend
+          property: host
+
+databases:
+  - name: hydration-tracker-db
+    databaseName: water_tracker
+    user: hydration_user
