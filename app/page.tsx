@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Droplets, BarChart3, Target, Bell, Smartphone, X } from "lucide-react"
+import { Droplets, BarChart3, Target, Bell, Smartphone } from "lucide-react"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -51,7 +51,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div suppressHydrationWarning className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -121,7 +121,7 @@ export default function LandingPage() {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Today's Goal</span>
+                  <span className="text-sm text-gray-600">Today&apos;s Goal</span>
                   <span className="font-semibold">2000ml</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">

@@ -1,119 +1,221 @@
 "use client"
 
 import * as React from "react"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Trash2, Plus, Droplets, Calendar } from "lucide-react"
+import DashboardLayout from "@/components/dashboard-layout"
+import { AddWaterDialog } from "./add-water-dialog"
 
-interface AddWaterDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onEntryAdded: (entry: any) => void
+interface WaterEntry {
+  _id: string
+  amount: number
+  unit: "ml" | "oz"
+  timestamp: string
 }
 
-export function AddWaterDialog({ open, onOpenChange, onEntryAdded }: AddWaterDialogProps) {
-  const [amount, setAmount] = React.useState<string>("")
-  const [unit, setUnit] = React.useState<"ml" | "oz">("ml")
-  const [isSubmitting, setIsSubmitting] = React.useState(false)
+export default function EntriesPage() {
+  const [entries, setEntries] = useState<WaterEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [totalToday, setTotalToday] = useState(0)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return
+  useEffect(() => {
+    fetchEntries()
+  }, [])
 
-    setIsSubmitting(true)
+  const fetchEntries = async () => {
+    setLoading(true)
     try {
-      const response = await fetch("/api/water", {
-        method: "POST",
+      const response = await fetch("/api/water/today", {
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify({
-          amount: Number(amount),
-          unit,
-        }),
       })
-
       if (response.ok) {
-        const newEntry = await response.json()
-        onEntryAdded(newEntry)
-        setAmount("")
-        onOpenChange(false)
-      } else {
-        alert("Failed to add water entry")
+        const data = await response.json()
+        setEntries(data.entries || [])
+        setTotalToday(data.total || 0)
       }
     } catch (error) {
-      console.error("Error adding water entry:", error)
-      alert("Failed to add water entry")
+      console.error("Error fetching entries:", error)
     } finally {
-      setIsSubmitting(false)
+      setLoading(false)
     }
   }
 
+  const handleEntryAdded = (newEntry: WaterEntry) => {
+    setEntries(prev => [newEntry, ...prev])
+    setTotalToday(prev => prev + (newEntry.unit === "oz" ? newEntry.amount * 29.5735 : newEntry.amount))
+  }
+
+  const handleDeleteEntry = async (entryId: string) => {
+    try {
+      const response = await fetch(`/api/water/${entryId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+      if (response.ok) {
+        const deletedEntry = entries.find(entry => entry._id === entryId)
+        if (deletedEntry) {
+          setEntries(prev => prev.filter(entry => entry._id !== entryId))
+          setTotalToday(prev => prev - (deletedEntry.unit === "oz" ? deletedEntry.amount * 29.5735 : deletedEntry.amount))
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting entry:", error)
+    }
+  }
+
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const formatAmount = (amount: number, unit: string) => {
+    return `${amount}${unit}`
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg md:w-full">
-          <DialogPrimitive.Title className="text-lg font-semibold leading-none tracking-tight">
-            Add Water Entry
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Description className="text-sm text-muted-foreground">
-            Record your water intake to track your hydration
-          </DialogPrimitive.Description>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="amount" className="text-sm font-medium">
-                  Amount
-                </label>
-                <Input
-                  id="amount"
-                  type="number"
-                  placeholder="Enter amount"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  required
-                />
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Water Entries</h1>
+            <p className="text-gray-600">Track and manage your daily water intake</p>
+          </div>
+          <Button onClick={() => setDialogOpen(true)} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add Entry
+          </Button>
+        </div>
+
+        {/* Today's Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Droplets className="h-5 w-5 text-blue-600" />
+              Today's Progress
+            </CardTitle>
+            <CardDescription>Your water intake for today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-3xl font-bold text-blue-600">{Math.round(totalToday)}ml</div>
+                <div className="text-sm text-gray-600">
+                  {Math.round((totalToday / 2000) * 100)}% of daily goal
+                </div>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="unit" className="text-sm font-medium">
-                  Unit
-                </label>
-                <Select value={unit} onValueChange={(value) => setUnit(value as "ml" | "oz")}>
-                  <SelectTrigger id="unit">
-                    <SelectValue placeholder="Select unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ml">Milliliters (ml)</SelectItem>
-                    <SelectItem value="oz">Ounces (oz)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="w-32 h-32 relative">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#e5e7eb"
+                    strokeWidth="8"
+                    fill="none"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#3b82f6"
+                    strokeWidth="8"
+                    fill="none"
+                    strokeDasharray={`${Math.min((totalToday / 2000) * 251.2, 251.2)} 251.2`}
+                    className="transition-all duration-500"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-sm font-semibold text-gray-700">
+                    {Math.round((totalToday / 2000) * 100)}%
+                  </span>
+                </div>
               </div>
             </div>
-            
-            <div className="flex justify-end gap-2">
-              <DialogPrimitive.Close asChild>
-                <Button type="button" variant="outline">
-                  Cancel
+          </CardContent>
+        </Card>
+
+        {/* Entries List */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Today's Entries ({entries.length})
+            </CardTitle>
+            <CardDescription>All water intake entries for today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {entries.length === 0 ? (
+              <div className="text-center py-8">
+                <Droplets className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-4">No entries yet today</p>
+                <Button onClick={() => setDialogOpen(true)} variant="outline">
+                  Add your first entry
                 </Button>
-              </DialogPrimitive.Close>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Adding..." : "Add Entry"}
-              </Button>
-            </div>
-          </form>
-          
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {entries.map((entry) => (
+                  <div
+                    key={entry._id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Droplets className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium">
+                          {formatAmount(entry.amount, entry.unit)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {formatTime(entry.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">
+                        {entry.unit === "oz" ? "Ounces" : "Milliliters"}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteEntry(entry._id)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <AddWaterDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onEntryAdded={handleEntryAdded}
+      />
+    </DashboardLayout>
   )
 }

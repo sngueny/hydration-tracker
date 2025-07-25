@@ -14,7 +14,7 @@ import {
   X 
 } from "lucide-react"
 
-export function DashboardNavbar() {
+export const DashboardNavbar: React.FC = () => {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -130,7 +130,7 @@ export function DashboardNavbar() {
               ))}
               
               <Button 
-                variant="outline" 
+                variant="outline"
                 className="w-full mt-4" 
                 onClick={handleLogout}
               >

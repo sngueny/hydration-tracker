@@ -1,20 +1,19 @@
 "use client";
 
-import * as React from "react"
-import { Toaster } from "sonner"
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
-import { Trash2, Droplets } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import DashboardLayout from "@/components/dashboard-layout"
+import * as React from "react";
+import { Toaster } from "sonner";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import DashboardLayout from "@/components/dashboard-layout";
 
 // Keep the NotificationSystem component
 export function NotificationSystem() {
-  return <Toaster position="top-right" />
+  return <Toaster position="top-right" />;
 }
 
 // Define types for better type safety
