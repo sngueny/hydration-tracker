@@ -9,7 +9,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: 'standalone',
   async rewrites() {
     return process.env.NODE_ENV === 'development' 
       ? [
@@ -20,6 +19,8 @@ const nextConfig = {
         ]
       : [];
   },
+  // Add output for static export if needed
+  output: 'standalone',
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
   },

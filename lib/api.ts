@@ -1,6 +1,6 @@
 export const API_URL = process.env.NODE_ENV === 'development' 
   ? '/api' 
-  : process.env.NEXT_PUBLIC_API_URL;
+  : process.env.NEXT_PUBLIC_API_URL || 'https://hydration-tracker-backend.onrender.com/';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
